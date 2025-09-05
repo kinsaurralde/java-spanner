@@ -598,7 +598,7 @@ public class ITTransactionTest {
           .to(com.google.cloud.spanner.Value.bytes(com.google.cloud.ByteArray.copyFrom(data)));
     }
     mutations.add(builder.build());
-    // This large message is under the 100MB limit
+    // This large message is under the 100MB limit.
     largeMessageClient.write(mutations);
   }
 
