@@ -41,7 +41,9 @@ import com.google.cloud.spanner.PartitionOptions;
 import com.google.cloud.spanner.ReadContext;
 import com.google.cloud.spanner.ReadOnlyTransaction;
 import com.google.cloud.spanner.ResultSet;
+import com.google.cloud.spanner.Spanner;
 import com.google.cloud.spanner.SpannerException;
+import com.google.cloud.spanner.SpannerOptions;
 import com.google.cloud.spanner.Statement;
 import com.google.cloud.spanner.Struct;
 import com.google.cloud.spanner.TimestampBound;
@@ -56,6 +58,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Random;
 import java.util.Vector;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -74,6 +77,8 @@ public class ITTransactionTest {
   @ClassRule public static IntegrationTestEnv env = new IntegrationTestEnv();
   private static Database db;
   private static DatabaseClient client;
+  private static Database largeMessageDb;
+  private static DatabaseClient largeMessageClient;
 
   /** Sequence for assigning unique keys to test cases. */
   private static int seq;
@@ -88,11 +93,31 @@ public class ITTransactionTest {
                     + "  V    INT64,"
                     + ") PRIMARY KEY (K)");
     client = env.getTestHelper().getDatabaseClient(db);
+
+    largeMessageDb =
+        env.getTestHelper()
+            .createTestDatabase(
+                "CREATE TABLE T ("
+                    + "  K    STRING(MAX) NOT NULL,"
+                    + "  col0    BYTES(MAX),"
+                    + "  col1    BYTES(MAX),"
+                    + "  col2    BYTES(MAX),"
+                    + "  col3    BYTES(MAX),"
+                    + "  col4    BYTES(MAX),"
+                    + "  col5    BYTES(MAX),"
+                    + "  col6    BYTES(MAX),"
+                    + "  col7    BYTES(MAX),"
+                    + "  col8    BYTES(MAX),"
+                    + "  col9    BYTES(MAX),"
+                    + ") PRIMARY KEY (K)");
+    largeMessageClient = env.getTestHelper().getDatabaseClient(largeMessageDb);
   }
 
   @Before
   public void removeTestData() {
     client.writeAtLeastOnce(Collections.singletonList(Mutation.delete("T", KeySet.all())));
+    largeMessageClient.writeAtLeastOnce(
+        Collections.singletonList(Mutation.delete("T", KeySet.all())));
   }
 
   private static String uniqueKey() {
@@ -559,6 +584,24 @@ public class ITTransactionTest {
     } catch (SpannerException e) {
       assertThat(e.getErrorCode()).isEqualTo(ErrorCode.INVALID_ARGUMENT);
     }
+  }
+
+  @Test
+  public void testTxWithLargeMessageSize() {
+    int bytesPerColumn = 10000000; // 10MB
+    String key = uniqueKey();
+    Random random = new Random();
+    List<Mutation> mutations = new ArrayList();
+    Mutation.WriteBuilder builder = Mutation.newInsertOrUpdateBuilder("T").set("K").to(key);
+    for (int j = 0; j < 7; j++) {
+      byte[] data = new byte[bytesPerColumn];
+      random.nextBytes(data);
+      builder.set("col" + j)
+          .to(com.google.cloud.spanner.Value.bytes(com.google.cloud.ByteArray.copyFrom(data)));
+    }
+    mutations.add(builder.build());
+    // This large message is under the 100MB limit.
+    largeMessageClient.write(mutations);
   }
 
   @Test
