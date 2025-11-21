@@ -1,0 +1,1 @@
+GOOGLE_SPANNER_ENABLE_DIRECT_ACCESS=true GOOGLE_CLOUD_PROJECT=cloud-spanner-perf-testing java -cp target/spanner-snippets/spanner-google-cloud-samples.jar:target/spanner-snippets/lib/* com.example.spanner.SpannerSample repeatedwrite kinsaurralde-test samples
