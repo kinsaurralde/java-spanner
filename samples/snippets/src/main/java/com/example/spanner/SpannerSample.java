@@ -2000,6 +2000,9 @@ public class SpannerSample {
       case "read":
         read(dbClient);
         break;
+      case "repeatedwrite":
+        RepeatedWriteSample.repeatedlyWriteExampleData(dbClient, 300);
+        break;
       case "addmarketingbudget":
         addMarketingBudget(dbAdminClient, DatabaseName.of(database.getInstanceId().getProject(),
             database.getInstanceId().getInstance(), database.getDatabase()));
@@ -2218,6 +2221,7 @@ public class SpannerSample {
     System.err.println("    SpannerExample delete my-instance example-db");
     System.err.println("    SpannerExample query my-instance example-db");
     System.err.println("    SpannerExample read my-instance example-db");
+    System.err.println("    SpannerExample repeatedwrite my-instance example-db");
     System.err.println("    SpannerExample addmarketingbudget my-instance example-db");
     System.err.println("    SpannerExample update my-instance example-db");
     System.err.println("    SpannerExample writetransaction my-instance example-db");

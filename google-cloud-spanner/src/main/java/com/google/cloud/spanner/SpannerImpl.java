@@ -154,6 +154,7 @@ class SpannerImpl extends BaseService<SpannerOptions> implements Spanner {
 
   SpannerImpl(SpannerOptions options) {
     this(options.getSpannerRpcV1(), options);
+    logger.info("--- RUNNING LOCAL JAVA-SPANNER CLIENT ---");
   }
 
   private void logSpannerOptions(SpannerOptions options) {
