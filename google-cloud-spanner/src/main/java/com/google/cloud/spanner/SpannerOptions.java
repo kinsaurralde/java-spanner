@@ -642,6 +642,24 @@ public class SpannerOptions extends ServiceOptions<Spanner, SpannerOptions> {
 
     @Override
     public ServiceRpc create(SpannerOptions options) {
+
+      // If DirectPath is enabled and no custom provider is already set, we create a
+      // new SpannerOptions object with our EEF provider.
+      if (options.isEnableDirectAccess() && options.getChannelProvider() == null) {
+
+        // Create and configure our custom EEF provider.
+        System.out.printf("Configuring eefProvider");
+	TransportChannelProvider eefProvider =
+            SpannerEefChannelProvider.create()
+                .withDirectPathEnabled(true)
+                .withEndpoint(options.getEndpoint())
+                .withCredentials(options.getCredentials());
+
+        // Build a new SpannerOptions instance that includes the EEF provider.
+        SpannerOptions optionsWithEef = options.toBuilder().setChannelProvider(eefProvider).build();
+        return new GapicSpannerRpc(optionsWithEef);
+      }
+      System.out.printf("Not configuring eefProvider");
       return new GapicSpannerRpc(options);
     }
   }
@@ -1796,6 +1814,7 @@ public class SpannerOptions extends ServiceOptions<Spanner, SpannerOptions> {
         this.numChannels =
             this.grpcGcpExtensionEnabled ? GRPC_GCP_ENABLED_DEFAULT_CHANNELS : DEFAULT_CHANNELS;
       }
+
 
       synchronized (lock) {
         if (activeTracingFramework == null) {

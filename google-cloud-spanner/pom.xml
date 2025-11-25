@@ -165,7 +165,7 @@
 
     <dependency>
       <groupId>com.google.cloud</groupId>
-      <artifactId>grpc-gcp</artifactId>
+      <artifactId>grpc-gcp</artifactId> <!--HERE-->
     </dependency>
     <dependency>
       <groupId>io.grpc</groupId>
@@ -245,6 +245,11 @@
       <groupId>io.opencensus</groupId>
       <artifactId>opencensus-impl</artifactId>
       <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.opencensus</groupId>
+      <artifactId>opencensus-exporter-stats-stackdriver</artifactId>
+      <version>0.31.1</version>
     </dependency>
     <dependency>
       <groupId>io.opentelemetry</groupId>
