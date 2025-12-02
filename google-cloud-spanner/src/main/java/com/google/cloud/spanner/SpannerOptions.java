@@ -83,6 +83,11 @@ import io.opencensus.trace.Tracing;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.sdk.metrics.SdkMeterProvider;
+import io.opentelemetry.sdk.metrics.export.MetricExporter;
+import io.opentelemetry.sdk.metrics.export.PeriodicMetricReader;
+import com.google.cloud.grpc.fallback.GcpFallbackOpenTelemetry;
 import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
@@ -92,6 +97,7 @@ import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -106,6 +112,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
+
 
 /** Options for the Cloud Spanner service. */
 public class SpannerOptions extends ServiceOptions<Spanner, SpannerOptions> {
@@ -643,23 +650,23 @@ public class SpannerOptions extends ServiceOptions<Spanner, SpannerOptions> {
     @Override
     public ServiceRpc create(SpannerOptions options) {
 
-      // If DirectPath is enabled and no custom provider is already set, we create a
-      // new SpannerOptions object with our EEF provider.
-      if (options.isEnableDirectAccess() && options.getChannelProvider() == null) {
+      // kinsaurralde
+  //     // If DirectPath is enabled and no custom provider is already set, we create a
+  //     // new SpannerOptions object with our EEF provider.
+  //     if (options.isEnableDirectAccess() && options.getChannelProvider() == null) {
 
-        // Create and configure our custom EEF provider.
-        System.out.printf("Configuring eefProvider");
-	TransportChannelProvider eefProvider =
-            SpannerEefChannelProvider.create()
-                .withDirectPathEnabled(true)
-                .withEndpoint(options.getEndpoint())
-                .withCredentials(options.getCredentials());
+  //       System.out.printf("Configuring eefProvider\n");
+	// TransportChannelProvider eefProvider =
+  //           SpannerEefChannelProvider.create()
+  //               .withDirectPathEnabled(true)
+  //               .withEndpoint(options.getEndpoint())
+  //               .withCredentials(options.getCredentials());
 
-        // Build a new SpannerOptions instance that includes the EEF provider.
-        SpannerOptions optionsWithEef = options.toBuilder().setChannelProvider(eefProvider).build();
-        return new GapicSpannerRpc(optionsWithEef);
-      }
-      System.out.printf("Not configuring eefProvider");
+  //       // Build a new SpannerOptions instance that includes the EEF provider.
+  //       SpannerOptions optionsWithEef = options.toBuilder().setChannelProvider(eefProvider).build();
+  //       return new GapicSpannerRpc(optionsWithEef);
+  //     }
+      System.out.printf("Not configuring eefProvider\n");
       return new GapicSpannerRpc(options);
     }
   }
@@ -1067,6 +1074,9 @@ public class SpannerOptions extends ServiceOptions<Spanner, SpannerOptions> {
     private SslContext mTLSContext = null;
     private boolean isExperimentalHost = false;
     private TransactionOptions defaultTransactionOptions = TransactionOptions.getDefaultInstance();
+
+    private boolean enableGcpFallback = true;
+
 
     private static String createCustomClientLibToken(String token) {
       return token + " " + ServiceOptions.getGoogApiClientLibName();
@@ -1727,6 +1737,14 @@ public class SpannerOptions extends ServiceOptions<Spanner, SpannerOptions> {
     }
 
     /**
+     * Disables the default GCP fallback channel behavior.
+     */
+    public Builder disableGcpFallback() {
+        this.enableGcpFallback = false;
+        return this;
+    }
+
+    /**
      * Sets whether to enable end to end tracing. Enabling this option will create the trace spans
      * at the Spanner layer. By default, end to end tracing is disabled. Enabling end to end tracing
      * requires OpenTelemetry to be set up. Simply enabling this option won't generate traces at
@@ -1813,6 +1831,39 @@ public class SpannerOptions extends ServiceOptions<Spanner, SpannerOptions> {
       if (this.numChannels == null) {
         this.numChannels =
             this.grpcGcpExtensionEnabled ? GRPC_GCP_ENABLED_DEFAULT_CHANNELS : DEFAULT_CHANNELS;
+      }
+      // kinsaurralde
+      if (this.enableGcpFallback) {
+        if (this.enableDirectAccess && this.channelProvider == null) {
+              // --- METRICS CONFIGURATION START ---
+              if (this.openTelemetry == null) {
+                System.out.println("Openteletmetry is null");
+              } else {
+                System.out.println("Open Telemetry is not null");
+              }
+
+    // 1. Set up an exporter. For production, you would use a Google Cloud Monitoring exporter.
+    // For this example, we use a simple in-memory exporter.
+    // MetricExporter exporter = GoogleCloudMetricExporter.createWithDefaultConfiguration();
+    // SdkMeterProvider meterProvider = SdkMeterProvider.builder()
+    //     .registerMetricReader(
+    //         PeriodicMetricReader.builder(exporter).setInterval(Duration.ofSeconds(10)).build())
+    //     .build();
+    // OpenTelemetry openTelemetry = OpenTelemetrySdk.builder().setMeterProvider(meterProvider).build();
+
+    // 2. Create the GcpFallbackOpenTelemetry object with the SDK.
+    // GcpFallbackOpenTelemetry fallbackTelemetry = GcpFallbackOpenTelemetry.newBuilder()
+    //     .withSdk(openTelemetry)
+    //     .build();
+
+    // --- METRICS CONFIGURATION END ---
+          TransportChannelProvider eefProvider =
+              SpannerEefChannelProvider.create()
+                  .withDirectPathEnabled(true)
+                  .withCredentials(this.credentials);
+                  // .withGcpFallbackOpenTelemetry(fallbackTelemetry);
+          this.setChannelProvider(eefProvider);
+        }
       }
 
 
