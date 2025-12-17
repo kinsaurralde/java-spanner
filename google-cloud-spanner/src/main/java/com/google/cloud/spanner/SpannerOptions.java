@@ -113,6 +113,53 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 
+// kinsaurralde IMPORTS start here
+import com.google.api.gax.grpc.InstantiatingGrpcChannelProvider;
+import com.google.api.gax.core.GaxProperties;
+import com.google.api.gax.rpc.ApiClientHeaderProvider;
+import com.google.api.gax.rpc.HeaderProvider;
+
+import com.google.auth.oauth2.GoogleCredentials;
+import com.google.api.gax.grpc.GrpcTransportChannel;
+import io.grpc.auth.MoreCallCredentials;
+import com.google.api.gax.rpc.FixedTransportChannelProvider;
+import com.google.api.gax.rpc.TransportChannelProvider;
+import com.google.auth.oauth2.GoogleCredentials;
+import com.google.cloud.grpc.fallback.GcpFallbackChannel;
+import com.google.cloud.grpc.fallback.GcpFallbackChannelOptions;
+import com.google.cloud.spanner.Spanner;
+import com.google.cloud.spanner.SpannerOptions;
+import com.google.api.gax.grpc.GrpcTransportChannel;
+
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
+
+import com.google.cloud.ServiceOptions;
+
+
+import io.grpc.Grpc;
+import io.grpc.alts.AltsChannelCredentials;
+import io.grpc.ChannelCredentials;
+import io.grpc.CallCredentials;
+import io.grpc.alts.GoogleDefaultChannelCredentials;
+import com.google.auth.oauth2.ComputeEngineCredentials;
+
+
+import java.io.IOException;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+// Add these imports to your file for the metrics configuration:
+import com.google.cloud.grpc.fallback.GcpFallbackOpenTelemetry;
+import java.util.Collections;
+import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.sdk.metrics.SdkMeterProvider;
+import io.opentelemetry.sdk.metrics.export.PeriodicMetricReader;
+import java.time.Duration;
+import io.opentelemetry.sdk.metrics.export.MetricExporter;
+
 
 /** Options for the Cloud Spanner service. */
 public class SpannerOptions extends ServiceOptions<Spanner, SpannerOptions> {
@@ -649,24 +696,6 @@ public class SpannerOptions extends ServiceOptions<Spanner, SpannerOptions> {
 
     @Override
     public ServiceRpc create(SpannerOptions options) {
-
-      // kinsaurralde
-  //     // If DirectPath is enabled and no custom provider is already set, we create a
-  //     // new SpannerOptions object with our EEF provider.
-  //     if (options.isEnableDirectAccess() && options.getChannelProvider() == null) {
-
-  //       System.out.printf("Configuring eefProvider\n");
-	// TransportChannelProvider eefProvider =
-  //           SpannerEefChannelProvider.create()
-  //               .withDirectPathEnabled(true)
-  //               .withEndpoint(options.getEndpoint())
-  //               .withCredentials(options.getCredentials());
-
-  //       // Build a new SpannerOptions instance that includes the EEF provider.
-  //       SpannerOptions optionsWithEef = options.toBuilder().setChannelProvider(eefProvider).build();
-  //       return new GapicSpannerRpc(optionsWithEef);
-  //     }
-      System.out.printf("Not configuring eefProvider\n");
       return new GapicSpannerRpc(options);
     }
   }
@@ -1811,6 +1840,29 @@ public class SpannerOptions extends ServiceOptions<Spanner, SpannerOptions> {
       return this;
     }
 
+      public static CallCredentials createHardBoundTokensCallCredentials(
+	ComputeEngineCredentials credentials,
+        ComputeEngineCredentials.GoogleAuthTransport googleAuthTransport,
+        ComputeEngineCredentials.BindingEnforcement bindingEnforcement) {
+      ComputeEngineCredentials.Builder credsBuilder =
+          ((ComputeEngineCredentials) credentials).toBuilder();
+      // We only set scopes and HTTP transport factory from the original credentials because
+      // only those are used in gRPC CallCredentials to fetch request metadata. We create a new
+      // credential
+      // via {@code newBuilder} as opposed to {@code toBuilder} because we don't want a reference to
+      // the
+      // access token held by {@code credentials}; we want this new credential to fetch a new access
+      // token
+      // from MDS using the {@param googleAuthTransport} and {@param bindingEnforcement}.
+      return MoreCallCredentials.from(
+          ComputeEngineCredentials.newBuilder()
+              .setScopes(credsBuilder.getScopes())
+              .setHttpTransportFactory(credsBuilder.getHttpTransportFactory())
+              .setGoogleAuthTransport(googleAuthTransport)
+              .setBindingEnforcement(bindingEnforcement)
+              .build());
+    }
+
     @SuppressWarnings("rawtypes")
     @Override
     public SpannerOptions build() {
@@ -1835,33 +1887,15 @@ public class SpannerOptions extends ServiceOptions<Spanner, SpannerOptions> {
       // kinsaurralde
       if (this.enableGcpFallback) {
         if (this.enableDirectAccess && this.channelProvider == null) {
-              // --- METRICS CONFIGURATION START ---
-              if (this.openTelemetry == null) {
-                System.out.println("Openteletmetry is null");
-              } else {
-                System.out.println("Open Telemetry is not null");
-              }
-
-    // 1. Set up an exporter. For production, you would use a Google Cloud Monitoring exporter.
-    // For this example, we use a simple in-memory exporter.
-    // MetricExporter exporter = GoogleCloudMetricExporter.createWithDefaultConfiguration();
-    // SdkMeterProvider meterProvider = SdkMeterProvider.builder()
-    //     .registerMetricReader(
-    //         PeriodicMetricReader.builder(exporter).setInterval(Duration.ofSeconds(10)).build())
-    //     .build();
-    // OpenTelemetry openTelemetry = OpenTelemetrySdk.builder().setMeterProvider(meterProvider).build();
-
-    // 2. Create the GcpFallbackOpenTelemetry object with the SDK.
-    // GcpFallbackOpenTelemetry fallbackTelemetry = GcpFallbackOpenTelemetry.newBuilder()
-    //     .withSdk(openTelemetry)
-    //     .build();
-
-    // --- METRICS CONFIGURATION END ---
+          if (this.openTelemetry == null) {
+            System.out.println("Openteletmetry is null");
+          } else {
+            System.out.println("Open Telemetry is not null");
+          }
           TransportChannelProvider eefProvider =
               SpannerEefChannelProvider.create()
                   .withDirectPathEnabled(true)
                   .withCredentials(this.credentials);
-                  // .withGcpFallbackOpenTelemetry(fallbackTelemetry);
           this.setChannelProvider(eefProvider);
         }
       }

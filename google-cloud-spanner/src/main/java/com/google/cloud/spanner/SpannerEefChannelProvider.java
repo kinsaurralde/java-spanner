@@ -38,6 +38,7 @@ import io.grpc.CallCredentials;
 import io.grpc.alts.GoogleDefaultChannelCredentials;
 import com.google.auth.oauth2.ComputeEngineCredentials;
 import io.grpc.auth.MoreCallCredentials;
+import java.time.Duration;
 
 public final class SpannerEefChannelProvider implements TransportChannelProvider {
 
@@ -126,6 +127,7 @@ public final class SpannerEefChannelProvider implements TransportChannelProvider
                 GcpFallbackChannelOptions.newBuilder()
                         .setPrimaryChannelName("directpath")
                         .setFallbackChannelName("cloudpath")
+                        .setPeriod(Duration.ofMillis(1000))
                         .setMinFailedCalls(1)
                         .setErrorRateThreshold(0.1f);
         if (fallbackTelemetry != null) {
