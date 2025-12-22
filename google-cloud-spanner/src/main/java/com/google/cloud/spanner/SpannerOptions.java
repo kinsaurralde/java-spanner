@@ -1104,7 +1104,7 @@ public class SpannerOptions extends ServiceOptions<Spanner, SpannerOptions> {
     private boolean isExperimentalHost = false;
     private TransactionOptions defaultTransactionOptions = TransactionOptions.getDefaultInstance();
 
-    private boolean enableGcpFallback = true;
+    private boolean enableGcpFallback = false;
 
 
     private static String createCustomClientLibToken(String token) {
@@ -1885,20 +1885,20 @@ public class SpannerOptions extends ServiceOptions<Spanner, SpannerOptions> {
             this.grpcGcpExtensionEnabled ? GRPC_GCP_ENABLED_DEFAULT_CHANNELS : DEFAULT_CHANNELS;
       }
       // kinsaurralde
-      if (this.enableGcpFallback) {
-        if (this.enableDirectAccess && this.channelProvider == null) {
-          if (this.openTelemetry == null) {
-            System.out.println("Openteletmetry is null");
-          } else {
-            System.out.println("Open Telemetry is not null");
-          }
-          TransportChannelProvider eefProvider =
-              SpannerEefChannelProvider.create()
-                  .withDirectPathEnabled(true)
-                  .withCredentials(this.credentials);
-          this.setChannelProvider(eefProvider);
-        }
-      }
+      // if (this.enableGcpFallback) {
+      //   if (this.enableDirectAccess && this.channelProvider == null) {
+      //     if (this.openTelemetry == null) {
+      //       System.out.println("Openteletmetry is null");
+      //     } else {
+      //       System.out.println("Open Telemetry is not null");
+      //     }
+      //     TransportChannelProvider eefProvider =
+      //         SpannerEefChannelProvider.create()
+      //             .withDirectPathEnabled(true)
+      //             .withCredentials(this.credentials);
+      //     this.setChannelProvider(eefProvider);
+      //   }
+      // }
 
 
       synchronized (lock) {

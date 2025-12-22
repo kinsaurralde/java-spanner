@@ -127,7 +127,7 @@ public final class SpannerEefChannelProvider implements TransportChannelProvider
                 GcpFallbackChannelOptions.newBuilder()
                         .setPrimaryChannelName("directpath")
                         .setFallbackChannelName("cloudpath")
-                        .setPeriod(Duration.ofMillis(1000))
+                        .setPeriod(Duration.ofMillis(10000))
                         .setMinFailedCalls(1)
                         .setErrorRateThreshold(0.1f);
         if (fallbackTelemetry != null) {
