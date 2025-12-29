@@ -253,6 +253,11 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
+import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder;
+import io.grpc.netty.shaded.io.netty.channel.nio.NioEventLoopGroup;
+import io.grpc.netty.shaded.io.netty.channel.socket.nio.NioSocketChannel;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
 /** Implementation of Cloud Spanner remote calls using Gapic libraries. */
 @InternalApi
 public class GapicSpannerRpc implements SpannerRpc {
@@ -385,19 +390,50 @@ public class GapicSpannerRpc implements SpannerRpc {
     // FALLBACK START
     if (options.getChannelProvider() == null && options.isEnableDirectAccess() && isEnableGcpFallbackEnv()) {
       // 1. Create InstantiatingGrpcChannelProvider for CloudPath (fallback leg). 
+      defaultChannelProviderBuilder.setPoolSize(1);
+      defaultChannelProviderBuilder.setChannelPrimer(null);
       InstantiatingGrpcChannelProvider.Builder cloudPathProviderBuilder = getDefaultChannelProviderBuilder(options, headerProviderWithUserAgent, /*isEnableDirectAccess=*/false);
       cloudPathProviderBuilder.setAttemptDirectPath(false);
       cloudPathProviderBuilder.setPoolSize(1);
 
+       // 1. Dedicated Executor (Keep this from previous attempt)
       final ExecutorService fallbackExecutor = Executors.newCachedThreadPool(new ThreadFactoryBuilder()
           .setDaemon(true)
-          .setNameFormat("SpannerFallback-Conn-%d")
+          .setNameFormat("SpannerFallback-App-%d")
           .build());
       cloudPathProviderBuilder.setExecutor(fallbackExecutor);
+
+      // 2. Dedicated Netty EventLoopGroup (IO Threads)
+      // This isolates the Fallback channel's network I/O from the Primary channel.
+      final NioEventLoopGroup fallbackEventLoopGroup = new NioEventLoopGroup(2, new ThreadFactoryBuilder()
+          .setDaemon(true)
+          .setNameFormat("SpannerFallback-IO-%d")
+          .build());
 
       // Capture the CloudPath builder using a configurator.
       final AtomicReference<ManagedChannelBuilder> cloudPathBuilderRef = new AtomicReference<>();
       cloudPathProviderBuilder.setChannelConfigurator(builder -> {
+        // --- FIX START: Apply the isolated EventLoopGroup ---
+        try {
+          // Use reflection to set the eventLoopGroup. This works for both 
+          // io.grpc.netty.NettyChannelBuilder and io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder
+          // avoiding "cannot find symbol" errors.
+          java.lang.reflect.Method setEventLoop = builder.getClass().getMethod("eventLoopGroup", 
+              Class.forName("io.grpc.netty.shaded.io.netty.channel.EventLoopGroup"));
+          java.lang.reflect.Method setChannelType = builder.getClass().getMethod("channelType", Class.class);
+
+          if (setEventLoop != null && setChannelType != null) {
+            setEventLoop.invoke(builder, fallbackEventLoopGroup);
+            // Use the shaded NioSocketChannel class
+            setChannelType.invoke(builder, Class.forName("io.grpc.netty.shaded.io.netty.channel.socket.nio.NioSocketChannel"));
+            System.out.println("EEF: Islated Fallback IO for " + builder.getClass().getSimpleName());
+          }
+        } catch (Exception e) {
+           // Fallback for non-shaded Netty or other builder types
+           System.err.println("EEF WARNING: Failed to isolate EventLoop (this is expected if not using Shaded Netty): " + e);
+        }
+        // --- FIX END ---
+
         cloudPathBuilderRef.set(builder);
         return builder;
       });
@@ -430,6 +466,7 @@ public class GapicSpannerRpc implements SpannerRpc {
 
       // 2. Configure DirectPath (primary leg).
 
+      defaultChannelProviderBuilder.setPoolSize(1);
       defaultChannelProviderBuilder.setChannelConfigurator(directPathBuilder -> {
         String jsonApiConfig = parseGrpcGcpApiConfig();
         GcpManagedChannelOptions gcpOptions = options.getGrpcGcpOptions();
@@ -477,6 +514,21 @@ public class GapicSpannerRpc implements SpannerRpc {
 
       channelProvider = MoreObjects.firstNonNull(
         options.getChannelProvider(), defaultChannelProviderBuilder.build());
+
+    // --- FIX START: Create a dedicated "Quiet" Provider for Admin Clients ---
+    TransportChannelProvider adminChannelProvider = channelProvider; // Default to same
+
+    if (options.getChannelProvider() == null && options.isEnableDirectAccess() && isEnableGcpFallbackEnv()) {
+       // Create a provider specifically for Admin clients that Forces CloudPath.
+       // This prevents them from creating "Noisy" DirectPath connections that starve the Data client.
+       InstantiatingGrpcChannelProvider.Builder adminBuilder = getDefaultChannelProviderBuilder(options, headerProviderWithUserAgent, false);
+       adminBuilder.setAttemptDirectPath(false); // FORCE CLOUDPATH
+       adminBuilder.setPoolSize(1);
+       adminBuilder.setChannelConfigurator(null); // Ensure no fallback logic is attached
+       
+       adminChannelProvider = adminBuilder.build();
+    }
+    // --- FIX END ---
 
       spannerWatchdog =
           Executors.newSingleThreadScheduledExecutor(
@@ -558,7 +610,7 @@ public class GapicSpannerRpc implements SpannerRpc {
             GrpcSpannerStubWithStubSettingsAndClientContext.create(pdmlSettings.build());
         this.instanceAdminStubSettings =
             options.getInstanceAdminStubSettings().toBuilder()
-                .setTransportChannelProvider(channelProvider)
+                .setTransportChannelProvider(adminChannelProvider)
                 .setCredentialsProvider(credentialsProvider)
                 .setStreamWatchdogProvider(watchdogProvider)
                 .setTracerFactory(
@@ -569,7 +621,7 @@ public class GapicSpannerRpc implements SpannerRpc {
 
         this.databaseAdminStubSettings =
             options.getDatabaseAdminStubSettings().toBuilder()
-                .setTransportChannelProvider(channelProvider)
+                .setTransportChannelProvider(adminChannelProvider)
                 .setCredentialsProvider(credentialsProvider)
                 .setStreamWatchdogProvider(watchdogProvider)
                 .setTracerFactory(
