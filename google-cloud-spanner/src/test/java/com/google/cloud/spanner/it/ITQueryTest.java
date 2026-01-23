@@ -17,6 +17,7 @@
 package com.google.cloud.spanner.it;
 
 import static com.google.cloud.spanner.testing.EmulatorSpannerHelper.isUsingEmulator;
+import static com.google.cloud.spanner.testing.ExperimentalHostHelper.isExperimentalHost;
 import static com.google.common.base.Strings.isNullOrEmpty;
 import static com.google.common.truth.Truth.assertThat;
 import static java.util.Arrays.asList;
@@ -143,6 +144,9 @@ public class ITQueryTest {
           exception.getMessage().contains("column \"apples\" does not exist"));
       // See https://www.postgresql.org/docs/current/errcodes-appendix.html
       // '42703' == undefined_column
+      assumeFalse(
+          "Skipping PGErrorCode check on experimental host due to b/473270453",
+          isExperimentalHost());
       assertEquals("42703", exception.getPostgreSQLErrorCode());
     } else {
       assertTrue(
@@ -424,11 +428,6 @@ public class ITQueryTest {
 
   @Test
   public void bindUuid() {
-    // TODO: Remove once it is enabled in emulator.
-    assumeFalse("Emulator does not support UUID yet", isUsingEmulator());
-    // TODO: Remove once it is enabled in production universe.
-    assumeTrue("UUID is currently only supported in cloud-devel", isUsingCloudDevel());
-
     UUID uuid = UUID.randomUUID();
     Struct row = execute(Statement.newBuilder(selectValueQuery).bind("p1").to(uuid), Type.uuid());
     assertThat(row.isNull(0)).isFalse();
@@ -437,11 +436,6 @@ public class ITQueryTest {
 
   @Test
   public void bindUuidNull() {
-    // TODO: Remove once it is enabled in emulator.
-    assumeFalse("Emulator does not support UUID yet", isUsingEmulator());
-    // TODO: Remove once it is enabled in production universe.
-    assumeTrue("UUID is currently only supported in cloud-devel", isUsingCloudDevel());
-
     Struct row =
         execute(Statement.newBuilder(selectValueQuery).bind("p1").to((UUID) null), Type.uuid());
     assertThat(row.isNull(0)).isTrue();
@@ -844,11 +838,6 @@ public class ITQueryTest {
 
   @Test
   public void bindUuidArray() {
-    // TODO: Remove once it is enabled in emulator.
-    assumeFalse("Emulator does not support UUID yet", isUsingEmulator());
-    // TODO: Remove once it is enabled in production universe.
-    assumeTrue("UUID is currently only supported in cloud-devel", isUsingCloudDevel());
-
     UUID u1 = UUID.randomUUID();
     UUID u2 = UUID.randomUUID();
 
@@ -862,11 +851,6 @@ public class ITQueryTest {
 
   @Test
   public void bindUuidArrayEmpty() {
-    // TODO: Remove once it is enabled in emulator.
-    assumeFalse("Emulator does not support UUID yet", isUsingEmulator());
-    // TODO: Remove once it is enabled in production universe.
-    assumeTrue("UUID is currently only supported in cloud-devel", isUsingCloudDevel());
-
     Struct row =
         execute(
             Statement.newBuilder(selectValueQuery).bind("p1").toUuidArray(Collections.emptyList()),
@@ -877,11 +861,6 @@ public class ITQueryTest {
 
   @Test
   public void bindUuidArrayNull() {
-    // TODO: Remove once it is enabled in emulator.
-    assumeFalse("Emulator does not support UUID yet", isUsingEmulator());
-    // TODO: Remove once it is enabled in production universe.
-    assumeTrue("UUID is currently only supported in cloud-devel", isUsingCloudDevel());
-
     Struct row =
         execute(
             Statement.newBuilder(selectValueQuery).bind("p1").toUuidArray(null),
